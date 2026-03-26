@@ -2,12 +2,13 @@
   "name": "aida26-backend",
   "version": "1.0.0",
   "main": "dist/index.js",
+  "type": "module",
   "scripts": {
     "start": "node dist/index.js",
-    "dev": "concurrently --kill-others-on-fail \"npm run type-check:watch\" \"npm run dev:backend\" \"npm run dev:frontend\"",
-    "dev:backend": "ts-node-dev --respawn src/index.ts",
-    "dev:frontend": "vite",
-    "build": "npm run type-check && tsc",
+    "build:backend": "tsc",
+    "build:frontend": "vite build",
+    "build": "npm run build:backend && npm run build:frontend",
+    "dev": "npm run build && node dist/index.js",
     "type-check": "tsc --noEmit",
     "type-check:watch": "tsc --noEmit --watch"
   },
@@ -21,7 +22,6 @@
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/pg": "^8.10.9",
-    "ts-node-dev": "^2.0.0",
     "typescript": "^5.3.3",
     "vite": "^5.0.0"
   }

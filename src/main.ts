@@ -1,3 +1,4 @@
+// In NodeNext ESM, explicit .js extensions are required for relative imports
 import { translations, Lang } from './i18n.js';
 
 interface Student {
@@ -17,6 +18,7 @@ interface Enrollment {
     libreta: string;
     cod_mat: string;
     subject_name?: string;
+    student_name?: string;
     final_grade?: number;
 }
 
@@ -49,21 +51,20 @@ function setupLanguage(): void {
 function renderNavbar(): void {
     const t = translations[currentLang];
     mainTitle.innerText = "SIA - Exactas UBA";
-    navbar.innerHTML = '';
     
-    const navItems = [
-        { label: t.students, action: showStudents },
-        { label: t.subjects, action: showSubjects },
-        { label: t.enrollments, action: showEnrollments }
-    ];
-
-    navItems.forEach(item => {
-        const btn = document.createElement('button');
-        btn.innerText = item.label;
-        btn.onclick = item.action;
-        navbar.appendChild(btn);
-    });
+    navbar.innerHTML = `
+        <button onclick="window.navTo('students')">${t.students}</button>
+        <button onclick="window.navTo('subjects')">${t.subjects}</button>
+        <button onclick="window.navTo('enrollments')">${t.enrollments}</button>
+    `;
 }
+
+// Global navigation helper
+(window as any).navTo = (view: string) => {
+    if (view === 'students') showStudents();
+    if (view === 'subjects') showSubjects();
+    if (view === 'enrollments') showEnrollments();
+};
 
 async function showStudents(): Promise<void> {
     const t = translations[currentLang];
@@ -95,8 +96,8 @@ async function showStudents(): Promise<void> {
         const tr = document.createElement('tr');
         tr.innerHTML = `<td>${s.libreta}</td><td>${s.first_name} ${s.last_name}</td><td>${s.email}</td>
             <td class="actions"><button class="edit-btn">${t.edit}</button><button class="del-btn">${t.delete}</button></td>`;
-        tr.querySelector('.edit-btn')!.onclick = () => showStudentForm(s);
-        tr.querySelector('.del-btn')!.onclick = async () => { if(confirm(t.delete + '?')) { await fetch(`${API_BASE_URL}/students/${s.libreta}`, {method:'DELETE'}); showStudents(); }};
+        (tr.querySelector('.edit-btn') as HTMLElement).onclick = () => showStudentForm(s);
+        (tr.querySelector('.del-btn') as HTMLElement).onclick = async () => { if(confirm(t.delete + '?')) { await fetch(`${API_BASE_URL}/students/${s.libreta}`, {method:'DELETE'}); showStudents(); }};
         tbody.appendChild(tr);
     });
     } catch (err: any) {
@@ -154,8 +155,8 @@ async function showSubjects(): Promise<void> {
     subjects.forEach(s => {
         const tr = document.createElement('tr');
         tr.innerHTML = `<td>${s.cod_mat}</td><td>${s.name}</td><td class="actions"><button class="edit-btn">${t.edit}</button><button class="del-btn">${t.delete}</button></td>`;
-        tr.querySelector('.edit-btn')!.onclick = () => showSubjectForm(s);
-        tr.querySelector('.del-btn')!.onclick = async () => { if(confirm(t.delete + '?')) { await fetch(`${API_BASE_URL}/subjects/${s.cod_mat}`, {method:'DELETE'}); showSubjects(); }};
+        (tr.querySelector('.edit-btn') as HTMLElement).onclick = () => showSubjectForm(s);
+        (tr.querySelector('.del-btn') as HTMLElement).onclick = async () => { if(confirm(t.delete + '?')) { await fetch(`${API_BASE_URL}/subjects/${s.cod_mat}`, {method:'DELETE'}); showSubjects(); }};
         tbody.appendChild(tr);
     });
     } catch (err: any) {
@@ -170,13 +171,19 @@ function renderError(title: string, message: string) {
 function showSubjectForm(subject?: Subject): void {
     const t = translations[currentLang];
     content.innerHTML = `<h2>${subject ? t.edit : t.add}</h2><form id="dataForm">
-        <input type="text" id="cod" placeholder="${t.cod_mat}" value="${subject?.cod_mat || ''}" ${subject?'readonly':'required'}>
-        <input type="text" id="name" placeholder="Name" value="${subject?.name || ''}" required>
-        <button type="submit">${t.save}</button><button type="button" id="cancelBtn">${t.cancel}</button></form>`;
+        <p><label>${t.cod_mat}:</label><input type="text" id="cod" value="${subject?.cod_mat || ''}" ${subject?'readonly':'required'}></p>
+        <p><label>${t.name}:</label><input type="text" id="name" value="${subject?.name || ''}" required></p>
+        <p><label>Department:</label><input type="text" id="dept" value="${subject?.department || ''}"></p>
+        <div class="form-actions"><button type="submit">${t.save}</button><button type="button" id="cancelBtn">${t.cancel}</button></div>
+    </form>`;
     document.getElementById('cancelBtn')!.onclick = showSubjects;
     document.getElementById('dataForm')!.onsubmit = async (e) => {
         e.preventDefault();
-        const data = { cod_mat: (document.getElementById('cod') as HTMLInputElement).value, name: (document.getElementById('name') as HTMLInputElement).value };
+        const data = { 
+            cod_mat: (document.getElementById('cod') as HTMLInputElement).value, 
+            name: (document.getElementById('name') as HTMLInputElement).value,
+            department: (document.getElementById('dept') as HTMLInputElement).value 
+        };
         await fetch(subject ? `${API_BASE_URL}/subjects/${subject.cod_mat}` : `${API_BASE_URL}/subjects`, { method: subject ? 'PUT' : 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data)});
         showSubjects();
     };
@@ -189,24 +196,28 @@ async function showEnrollments(): Promise<void> {
         if (!response.ok) throw new Error(`HTTP Error! Status: ${response.status}`);
         const data: Enrollment[] = await response.json();
 
-        content.innerHTML = `
-            <div style="display: flex; justify-content: space-between; padding: 10px;">
-                <h2>${t.enrollments}</h2>
-                <button id="addBtn">${t.add}</button>
-            </div>
-            <table>
-                <thead>
-                    <tr><th>${t.libreta}</th><th>${t.cod_mat}</th><th>${t.name}</th><th>Actions</th></tr>
-                </thead>
-                <tbody id="listBody"></tbody>
-            </table>`;
+    content.innerHTML = `
+        <div style="display: flex; justify-content: space-between; padding: 10px;">
+            <h2>${t.enrollments}</h2>
+            <button id="addBtn">${t.add}</button>
+        </div>
+        <table>
+            <thead>
+                <tr><th>${t.libreta}</th><th>${t.name}</th><th>Grade</th><th>Actions</th></tr>
+            </thead>
+            <tbody id="listBody"></tbody>
+        </table>`;
 
     document.getElementById('addBtn')!.onclick = () => showEnrollmentForm();
     const tbody = document.getElementById('listBody')!;
     data.forEach(e => {
         const tr = document.createElement('tr');
-        tr.innerHTML = `<td>${e.libreta}</td><td>${e.cod_mat}</td><td>${e.subject_name || ''}</td><td class="actions"><button class="del-btn">${t.delete}</button></td>`;
-        tr.querySelector('.del-btn')!.onclick = async () => { if(confirm(t.delete + '?')) { await fetch(`${API_BASE_URL}/enrollments/${e.libreta}/${e.cod_mat}`, {method:'DELETE'}); showEnrollments(); }};
+        tr.innerHTML = `
+            <td>${e.libreta}</td>
+            <td>${e.subject_name || e.cod_mat}</td>
+            <td>${e.final_grade ?? '-'}</td>
+            <td class="actions"><button class="del-btn">${t.delete}</button></td>`;
+        (tr.querySelector('.del-btn') as HTMLElement).onclick = async () => { if(confirm(t.delete + '?')) { await fetch(`${API_BASE_URL}/enrollments/${e.libreta}/${e.cod_mat}`, {method:'DELETE'}); showEnrollments(); }};
         tbody.appendChild(tr);
     });
     } catch (err: any) {
@@ -217,13 +228,20 @@ async function showEnrollments(): Promise<void> {
 function showEnrollmentForm(): void {
     const t = translations[currentLang];
     content.innerHTML = `<h2>${t.add} ${t.enrollments}</h2><form id="dataForm">
-        <input type="text" id="lib" placeholder="${t.libreta}" required>
-        <input type="text" id="cod" placeholder="${t.cod_mat}" required>
-        <button type="submit">${t.save}</button><button type="button" id="cancelBtn">${t.cancel}</button></form>`;
+        <p><label>${t.libreta}:</label><input type="text" id="lib" required></p>
+        <p><label>${t.cod_mat}:</label><input type="text" id="cod" required></p>
+        <p><label>Grade:</label><input type="number" id="grade" step="0.01" min="0" max="10"></p>
+        <div class="form-actions"><button type="submit">${t.save}</button><button type="button" id="cancelBtn">${t.cancel}</button></div>
+    </form>`;
     document.getElementById('cancelBtn')!.onclick = showEnrollments;
     document.getElementById('dataForm')!.onsubmit = async (e) => {
         e.preventDefault();
-        const data = { libreta: (document.getElementById('lib') as HTMLInputElement).value, cod_mat: (document.getElementById('cod') as HTMLInputElement).value };
+        const gradeVal = (document.getElementById('grade') as HTMLInputElement).value;
+        const data = { 
+            libreta: (document.getElementById('lib') as HTMLInputElement).value, 
+            cod_mat: (document.getElementById('cod') as HTMLInputElement).value,
+            final_grade: gradeVal ? parseFloat(gradeVal) : null
+        };
         await fetch(`${API_BASE_URL}/enrollments`, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data)});
         showEnrollments();
     };

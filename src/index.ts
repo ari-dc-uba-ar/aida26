@@ -1,10 +1,16 @@
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import { Pool } from 'pg';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// ESM __dirname fix
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Database connection
 const pool = new Pool({
@@ -31,27 +37,21 @@ pool.query('SELECT NOW()', (err) => {
 });
 
 // Middleware to log requests (Zero tolerance for silent failures)
-app.use((req, res, next) => {
+app.use((req, _res, next) => {
     console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
     next();
 });
 
-// Welcome route to confirm API is running
-app.get('/', (req, res) => {
-    res.send(`
-        <div style="font-family: sans-serif; text-align: center; margin-top: 50px;">
-            <h1>🚀 SIA API is running</h1>
-            <p>You are accessing the <b>Backend</b> port (3000).</p>
-            <p>To see the UI/CRUD, open: <a href="http://localhost:5173">http://localhost:5173</a></p>
-        </div>`);
-});
+// Serve static files from the Vite build directory
+// When running from dist/index.js, the client files are in ./client
+app.use(express.static(path.join(__dirname, 'client')));
 
 /**
  * Generic CRUD helper for simple tables
  */
 const setupCrud = (path: string, table: string, pkField: string) => {
     // Get all
-    app.get(`/${path}`, async (req: Request, res: Response) => {
+    app.get(`/${path}`, async (_req: Request, res: Response) => {
         const result = await pool.query(`SELECT * FROM ${table}`);
         res.json(result.rows);
     });
@@ -89,7 +89,7 @@ setupCrud('students', 'students', 'libreta');
 setupCrud('subjects', 'subjects', 'cod_mat');
 
 // Special handling for composite PK in enrollments
-app.get('/enrollments', async (req, res) => {
+app.get('/enrollments', async (_req, res) => {
     const result = await pool.query(`
         SELECT e.*, s.first_name, s.last_name, m.name as subject_name 
         FROM enrollments e
@@ -114,6 +114,13 @@ app.post('/enrollments', async (req, res) => {
         [libreta, cod_mat]
     );
     res.status(201).json(result.rows[0]);
+});
+
+// Fallback to index.html for SPA routing
+app.get('*', (req, res) => {
+    if (!req.url.startsWith('/api')) {
+        res.sendFile(path.join(__dirname, 'client/index.html'));
+    }
 });
 
 const PORT = 3000;
